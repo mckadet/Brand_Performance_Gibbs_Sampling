@@ -1,0 +1,496 @@
+---
+title: "Project - Stat 466"
+author: "McKade Thomas"
+date: "3/28/2020"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+Data key
+```{r}
+#   1.  Costco Water
+#   2.  Costco Water
+#   3.  Costco Water
+#   4.  Costco Water
+#   5.  Costco Water
+#   6.  Costco No Water
+#   7.  Costco No Water
+#   8.  Costco No Water
+#   9.  Costco No Water
+#   10. Costco No Water
+#   11. Sams Water
+#   12. Sams Water
+#   13. Sams Water
+#   14. Sams Water
+#   15. Sams Water
+#   16. Sams No Water
+#   17. Sams No Water
+#   18. Sams No Water
+#   19. Sams No Water
+#   20. Sams No Water
+#   21. Bounty Water
+#   22. Bounty Water
+#   23. Bounty Water
+#   24. Bounty Water
+#   25. Bounty Water
+#   26. Bounty No Water
+#   27. Bounty No Water
+#   28. Bounty No Water
+#   29. Bounty No Water
+#   30. Bounty No Water
+```
+
+Additional controls to add...
+```{r}
+# - Curved side up for each replicate
+# - Start with 194 gram glass cup which was dried after each replicate
+# - 1 inch line showing weight placement was aligned for each replicate
+# - Constant temp: approx 72 degrees for each water replicate
+# - Same orientation of the clips (45 degrees) for each replicate
+# - 30 second saturation time for each water replicate
+# - Water placement was the same for each replicate (there was minor dripage)
+# - All weight was weighed 5 times with the same food scale. The mode was taken from these
+#   5 measurements and recorded as the weight for each replicate
+```
+
+Randomization of replicates
+```{r}
+set.seed(1947)
+random_order <- 1:30
+random_sample <- sample(random_order, 30, replace = F)
+```
+
+Recorded data
+```{r}
+data_grams <- c(643,406,809,440,605,888,601,357,633,878,
+                477,635,463,735,791,606,396,764,758,758,
+                515,594,583,707,482,452,799,695,471,747)
+```
+
+Formating the data
+```{r}
+key_ID <- 1:30
+key_brand <- c("Costco","Costco","Costco","Costco","Costco","Costco","Costco","Costco",
+               "Costco","Costco","Sams","Sams","Sams","Sams","Sams","Sams","Sams","Sams",
+               "Sams","Sams","Bounty","Bounty","Bounty","Bounty","Bounty","Bounty","Bounty",
+               "Bounty","Bounty","Bounty")
+key_water <- c("Water","Water","Water","Water","Water","NoWater","NoWater","NoWater","NoWater",
+               "NoWater","Water","Water","Water","Water","Water","NoWater","NoWater","NoWater",
+               "NoWater","NoWater","Water","Water","Water","Water","Water","NoWater","NoWater",
+               "NoWater","NoWater","NoWater")
+
+set.seed(1947)
+random_match_ID <- c(21,9,25,20,4,12,1,10,2,5,28,26,7,14,15,23,8,24,11,13,17,29,6,30,19,18,22,27,16,3)
+
+set.seed(1947)
+random_match_brand <- c("Bounty","Costco","Bounty","Sams","Costco","Sams","Costco","Costco","Costco",
+                        "Costco","Bounty","Bounty","Costco","Sams","Sams","Bounty","Costco","Bounty",
+                        "Sams","Sams","Sams","Bounty","Costco","Bounty","Sams","Sams","Bounty","Bounty",
+                        "Sams","Costco")
+set.seed(1947)
+random_match_water <- c("Water","NoWater","Water","NoWater","Water","Water","Water","NoWater","Water",
+                        "Water","NoWater","NoWater","NoWater","Water","Water","Water","NoWater","Water",
+                        "Water","Water","NoWater","NoWater","NoWater","NoWater","NoWater","NoWater",
+                        "Water","NoWater","NoWater","Water")
+
+paper_df_temp <- data.frame("ID" = random_match_ID, "Brand_Factor" = random_match_brand, 
+                            "Water_Factor" = random_match_water, "Total_Grams" = data_grams)
+paper_df <- paper_df_temp[order(paper_df_temp$ID),]
+paper_df
+```
+
+Packages
+```{r include=FALSE}
+library(R2jags)
+library(rmutil)
+library(dplyr)
+```
+
+
+Subsetting the Data
+```{r}
+#Create a column of 0s and 1s for Water
+l <- rep(NA,length(paper_df[,3]))
+for(i in 1:length(paper_df[,3])){
+  if(paper_df[i,3]=='Water'){ 
+    l[i] <- 1
+  }
+  else {
+    l[i] <- 0
+  }
+}
+l
+paper <- cbind(paper_df,l)
+
+#Reorder the data
+paper <- paper[c(1,2,3,5,4)]
+colnames(paper) <- c("ID","Brand","Water","Water_Bool","Grams")
+paper <- paper[,-3]
+paper
+```
+
+
+
+```{r}
+#Create a column of 0s and 1s for Costco
+Brand2 <- rep(NA,length(paper_df[,2]))
+for(i in 1:length(paper_df[,2])){
+  if(paper_df[i,2]=='Sams'){ 
+    Brand2[i] <- 1
+  }
+  else {
+    Brand2[i] <- 0
+  }
+}
+Brand2
+
+#Create a column of 0s and 1s for Sams
+Brand3 <- rep(NA,length(paper_df[,2]))
+for(i in 1:length(paper_df[,2])){
+  if(paper_df[i,2]=='Bounty'){ 
+    Brand3[i] <- 1
+  }
+  else {
+    Brand3[i] <- 0
+  }
+}
+Brand3
+
+all_paper <- cbind(paper, Brand2)
+all_paper <- cbind(all_paper, Brand3)
+```
+
+
+EDA of the data
+```{r}
+#Subset the data
+C_nw <- subset(all_paper, all_paper[,2]=="Costco" & all_paper[,3]==0)
+C_w <- subset(all_paper, all_paper[,2]=="Costco" & all_paper[,3]==1)
+S_nw <- subset(all_paper, all_paper[,2]=="Sams" & all_paper[,3]==0)
+S_w <- subset(all_paper, all_paper[,2]=="Sams" & all_paper[,3]==1)
+B_nw <- subset(all_paper, all_paper[,2]=="Bounty" & all_paper[,3]==0)
+B_w <- subset(all_paper, all_paper[,2]=="Bounty" & all_paper[,3]==1)
+
+#Difference in water Vs. no water
+(C_initial_diff <- mean(C_nw$Grams) - mean(C_w$Grams))
+#Costco paper towels on average held 65.8 more grams when wet.
+(S_initial_diff <- mean(S_nw$Grams) - mean(S_w$Grams))
+#Sams paper towels on average held 58.4 more grams when dry.
+(B_initial_diff <- mean(B_nw$Grams) - mean(B_w$Grams))
+#Bounty paper towels on average held 26.2 more grams when wet.
+
+
+#Difference in Brands
+#No water
+c("Costco w/out water:", mean(C_nw$Grams),
+  "Bounty w/out water:", mean(B_nw$Grams),
+  "Sams w/out water:", mean(S_nw$Grams))
+#For dry paper towels Sams Club performed best.
+
+#No water
+c("Costco w/ water:", mean(C_w$Grams),
+  "Bounty w/ water:", mean(B_w$Grams),
+  "Sams w/ water:", mean(S_w$Grams))
+#For wet paper towels Bounty performed best.
+
+
+water <- all_paper[,3]
+grams <- all_paper[,4]
+Sams <- all_paper[,5]
+Bounty <- all_paper[,6]
+
+logGrams <- log(grams)
+n <- length(grams)
+
+hist(grams, main="Plot of Weight Held in Grams")
+hist(logGrams,main="Plot of Weight Held in Log(Grams)")
+```
+
+
+```{r}
+##################
+# Lognormal Model 
+library(R2jags)
+#####
+# Lognormal Model
+Papermdl <- "model {
+for(i in 1:n){
+logGrams[i] ~ dnorm(mu[i],1/(sigma)^2)
+mu[i] <- beta0 + beta1*water[i] + beta2*Sams[i] + beta3*Bounty[i] + beta4*water[i]*Sams[i] + beta5*water[i]*Bounty[i]
+}
+sigma ~ dexp(1)
+beta0 ~ dnorm(0,1/100)
+beta1 ~ dnorm(0,1/100)
+beta2 ~ dnorm(0,1/100)
+beta3 ~ dnorm(0,1/100)
+beta4 ~ dnorm(0,1/100)
+beta5 ~ dnorm(0,1/100)
+PPDCostcoNW ~ dnorm(beta0,1/(sigma)^2)
+PPDCostcoW ~ dnorm(beta0+beta1,1/(sigma)^2)
+PPDSamsNW ~ dnorm(beta0+beta2,1/(sigma)^2)
+PPDSamsW ~ dnorm(beta0+beta1+beta2+beta4,1/(sigma)^2)
+PPDBountyNW ~ dnorm(beta0+beta3,1/(sigma)^2)
+PPDBountyW ~ dnorm(beta0+beta1+beta3+beta5,1/(sigma)^2)
+}
+"
+
+water.sim <- jags(
+  data=c('logGrams','n','water','Sams','Bounty'),
+  parameters.to.save=c('beta0','beta1','beta2','beta3','beta4','beta5','sigma','PPDCostcoNW','PPDCostcoW',
+                       'PPDSamsNW','PPDSamsW','PPDBountyNW','PPDBountyW'),
+  model.file=textConnection(Papermdl),
+  n.iter=20000,
+  n.burnin=2000,
+  n.chains=5,
+  n.thin=1
+)
+
+```
+
+
+
+```{r}
+#Assigning Variables
+PPDB_nw <- water.sim$BUGSoutput$sims.matrix[,1]
+PPDB_w <- water.sim$BUGSoutput$sims.matrix[,2]
+PPDC_nw <- water.sim$BUGSoutput$sims.matrix[,3]
+PPDC_w <- water.sim$BUGSoutput$sims.matrix[,4]
+PPDS_nw <- water.sim$BUGSoutput$sims.matrix[,5]
+PPDS_w <- water.sim$BUGSoutput$sims.matrix[,6]
+plot(PPDB_nw,type="l")
+
+beta0 <- water.sim$BUGSoutput$sims.matrix[,7]
+beta1 <- water.sim$BUGSoutput$sims.matrix[,8]
+beta2 <- water.sim$BUGSoutput$sims.matrix[,9]
+beta3 <- water.sim$BUGSoutput$sims.matrix[,10]
+beta4 <- water.sim$BUGSoutput$sims.matrix[,11]
+beta5 <- water.sim$BUGSoutput$sims.matrix[,12]
+sigma <- water.sim$BUGSoutput$sims.matrix[,14]
+
+#Check mixing
+plot(PPDB_nw,type="l")
+plot(PPDB_w,type="l")
+plot(PPDC_nw,type="l")
+plot(PPDC_w,type="l")
+plot(PPDS_nw,type="l")
+plot(PPDS_w,type="l")
+
+par(mfrow=c(2,4))
+plot(beta0,type="l")
+plot(beta1,type="l")
+plot(beta2,type="l")
+plot(beta3,type="l")
+plot(beta4,type="l")
+plot(beta5,type="l")
+plot(sigma,type="l")
+par(mfrow=c(1,1))
+
+par(mfrow=c(2,4))
+acf(beta0)
+acf(beta1)
+acf(beta2)
+acf(beta3)
+acf(beta4)
+acf(beta5)
+acf(sigma)
+par(mfrow=c(1,1))
+
+#Check convergence and model fit
+gelman.diag(water.sim$BUGSoutput)
+water.sim$BUGSoutput$DIC
+effectiveSize(water.sim)
+
+```
+
+
+Check Goodness of Fit
+```{r}
+#######################
+# Check Model Fit w/ the GoF Test found in Section 3.4
+
+# Calculating the fitted quantiles for each posterior model
+# and adjusting for a discrete model 
+GoF <- matrix(NA,ncol=length(logGrams),nrow=length(beta0))
+for (i in 1:length(beta0)) {
+  for (j in 1:length(water)) {
+    GoF[i,j] <- pnorm(logGrams[j],(beta0[i] + beta1[i]*water[j] + beta2[i]*Sams[j] + beta3[i]*Bounty[j] + beta4[i]*water[j]*Sams[j] + beta5[i]*water[j]*Bounty[j]),sd=sigma[i])
+  }
+}
+
+# Function requires fitted quantiles and returns a p-value
+GoF_Test <- function(fitted_quantiles) {
+  n <- length(fitted_quantiles)
+  K <- round((n)^(0.4))
+  mK <- table(cut(fitted_quantiles,(0:K)/K))
+  np <- n/K
+  RB <- sum(((mK-np)^2)/np)
+  return(1-pchisq(RB,K-1))
+}
+
+# Calculating the p-values for each posterior model
+GoF_Summary <- apply(GoF,1,GoF_Test)
+
+# Histogram of posterior model p-values
+hist(GoF_Summary,xlim=c(0,1))
+
+# Percent of posterior models with p-value less than 0.05
+mean(GoF_Summary < 0.05)
+#About 5.84% of p-values would be rejected which gives us greta indication that this model
+#   is a good fit for the data!
+```
+
+
+Analysis of the Model
+```{r}
+###########################################
+#Assessing the signficance of each covariate in the model
+hist(beta1)
+mean(beta1>0)
+#Prob: 0.780
+
+hist(beta2)
+mean(beta2>0)
+#Prob: .823
+
+hist(beta3)
+mean(beta3>0)
+#Prob: .835
+
+hist(beta4)
+mean(beta4<0)
+#Prob: .803
+
+hist(beta5)
+mean(beta5<0)
+#Prob: 0.663
+
+#Based on these probabilities, it appears that beta2, beta3, and beta4 have the most significance in the model.
+#   This suggests that Sams and Bounty as well as the interaction between water and Sams have the most effect
+#     on determining strength of paper towels/weight that they can hold.
+
+
+
+############################################
+#Checking out the Posterior Predictive Models
+#Unlog the data
+EPPDC_nw <- exp(PPDC_nw)
+EPPDC_w <- exp(PPDC_w)
+EPPDS_nw <- exp(PPDS_nw)
+EPPDS_w <- exp(PPDS_w)
+EPPDB_nw <- exp(PPDB_nw)
+EPPDB_w <- exp(PPDB_w)
+
+
+mean(EPPDC_nw)
+mean(EPPDC_w)
+mean(EPPDS_nw)
+mean(EPPDS_w)
+mean(EPPDB_nw)
+mean(EPPDB_w)
+
+
+hist(EPPDC_nw)
+hist(EPPDC_w)
+hist(EPPDS_nw)
+hist(EPPDS_w)
+hist(EPPDB_nw)
+hist(EPPDB_w)
+#All plots look fairly normal with a little bit of right skew.
+
+#################################
+#Difference in Water Vs. No water
+(C_water_diff <- mean(EPPDC_nw) - mean(EPPDC_w))
+#The paper towels from Costco held about 253.4 more grams on average when wet.
+(S_water_diff <- mean(EPPDS_nw) - mean(EPPDS_w))
+#The paper towels from Sams Club held about 316.2 more grams on average when wet.
+(B_water_diff <- mean(EPPDB_nw) - mean(EPPDB_w))
+#The Bounty paper towls held about 106.1 more grams on average when wet.
+
+#All brands actually held more weight when wet.
+
+#####################
+#Difference in Brands
+#No water
+c("Costco w/out water:", mean(EPPDC_nw),
+  "Sams w/out water:", mean(EPPDS_nw),
+  "Bounty w/out water:", mean(EPPDB_nw))
+#On average, Bounty paper towels performed the best when dry followed by Sams, then Costco
+
+#Water
+c("Costco w/ water:", mean(EPPDC_w),
+  "Sams w/ water:", mean(EPPDS_w),
+  "Bounty w/ water:", mean(EPPDB_w))
+#On average, Sams paper towels performed the best when wet followed by Bounty, then Costco
+
+#In both cases, wet and dry, Bounty paper towels held the greatest amount of weight before failing.
+
+
+#90% Confidence intervals for mean Grams
+c("Costco w/out water:", quantile(EPPDC_nw,c(0.05,0.95)),
+  "Costco w/ water:", quantile(EPPDC_w,c(0.05,0.95)),
+  "Sams w/out water:", quantile(EPPDS_nw,c(0.05,0.95)),
+  "Sams w/ water:", quantile(EPPDS_w,c(0.05,0.95)),
+  "Bounty w/out water:", quantile(EPPDB_nw,c(0.05,0.95)),
+  "Bounty w/ water:", quantile(EPPDB_w,c(0.05,0.95)))
+
+```
+
+
+Graphics to illustrate Relationships between Covariates
+```{r}
+#Distributions for dry
+d1 <- density(EPPDC_nw)
+d2 <- density(EPPDS_nw)
+d3 <- density(EPPDB_nw)
+plot(d1,col="darkred",xlab="Weight(g)",main="Weight Held when Dry")
+lines(d2,col="darkblue")
+lines(d3,col="darkgreen")
+#Add a legend
+legend(800, .005, legend=c("Costco", "Sams","Bounty"),
+       col=c("darkred", "darkblue","darkgreen"),lty=1, cex=1)
+```
+
+```{r}
+#Distributions for Wet
+d4 <- density(EPPDC_w)
+d5 <- density(EPPDS_w)
+d6 <- density(EPPDB_w)
+plot(d4,col="darkred",xlab="Weight(g)",main="Weight Held when Wet")
+lines(d5,col="darkblue")
+lines(d6,col="darkgreen")
+#Add a legend
+legend(1300, .003, legend=c("Costco", "Sams","Bounty"),
+       col=c("darkred", "darkblue","darkgreen"),lty=1, cex=1)
+```
+
+
+Final Graphics
+```{r}
+#Differences in water Vs. no water
+#Costco
+boxplot(EPPDC_nw,EPPDC_w,names=c("Dry","Wet"),xlab="Brand",ylab="Grams",main="Difference for Costco")
+#Sams Club
+boxplot(EPPDS_nw,EPPDS_w,names=c("Dry","Wet"),xlab="Brand",ylab="Grams",main="Difference for Sams")
+#Bounty
+boxplot(EPPDB_nw,EPPDB_w,names=c("Dry","Wet"),xlab="Brand",ylab="Grams",main="Difference for Bounty")
+
+#Difference in Brands
+#No Water
+boxplot(EPPDC_nw,EPPDS_nw,EPPDB_nw,names=c("Costco","Sams","Bounty"),xlab="Brand",ylab="Grams",main="Difference in Brand when Dry")
+#Water
+boxplot(EPPDC_w,EPPDS_w,EPPDB_w,names=c("Costco","Sams","Bounty"),xlab="Brand",ylab="Grams",main="Difference in Brand when Wet")
+
+#All Together
+boxplot(EPPDC_nw,EPPDC_w,EPPDS_nw,EPPDS_w,EPPDB_nw,EPPDB_w,at=c(1,2, 3,4, 5,6),
+        col=c("red","red2","blue","royalblue2","green","green2"),
+        names=c("Cost Dry","Cost Wet","Sams Dry","Sams Wet","Bount Dry", "Bount Wet"),xlab="Brand",
+        ylab="Weight in Grams",main="Difference in Strength Between Brands When Dry and Wet")
+
+#All Together Zoomed In
+boxplot(EPPDC_nw,EPPDC_w,EPPDS_nw,EPPDS_w,EPPDB_nw,EPPDB_w,at=c(1,2, 3,4, 5,6),
+        col=c("red","red2","royalblue","royalblue2","green","green2"),
+        names=c("C Dry","C Wet","S Dry","S Wet","B Dry", "B Wet"),xlab="Brand",
+        ylab="Weight in Grams",main="Difference in Strength Between Brands When Dry and Wet",ylim=c(100,1800))
+```
+
